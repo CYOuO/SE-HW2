@@ -20,22 +20,12 @@ current_labels = []
 current_details = {}
 last_modified_time = 0
 hovered_index = -1
-
-# 【新功能】用來追蹤已開啟的視窗，防止重複開啟 & 用於自動更新
-# 格式: { '類別名稱': {'root': window_obj, 'tree': tree_obj, 'label': total_label_obj} }
-opened_windows = {}
+opened_windows = {} 
 
 # --- 客製化顏色順序 ---
 CUSTOM_COLORS = [
-    '#F48FB1', # 粉
-    '#CE93D8', # 紫
-    '#9FA8DA', # 靛
-    '#90CAF9', # 藍
-    '#A5D6A7', # 綠
-    '#FFF59D', # 黃
-    '#FFCC80', # 橙
-    '#EF9A9A', # 紅
-    '#BCAAA4', # 棕
+    '#F48FB1', '#CE93D8', '#9FA8DA', '#90CAF9', '#A5D6A7', 
+    '#FFF59D', '#FFCC80', '#EF9A9A', '#BCAAA4'
 ]
 
 def darken_color(hex_color, factor=0.6):
@@ -47,27 +37,20 @@ def darken_color(hex_color, factor=0.6):
         return 'black'
 
 def get_expenses_data():
-    """讀取資料邏輯"""
     global last_modified_time
     if not os.path.exists(DATA_FILE): return None, None
-
     try:
         file_mtime = os.path.getmtime(DATA_FILE)
-        # 這裡我們稍微修改邏輯，如果是為了自動更新表格，我們需要知道資料是不是變了
-        # 但為了效能，若沒變回傳 NO_CHANGE 給圖表用，但我們需要把這邏輯跟表格更新分開
-        if file_mtime == last_modified_time: 
-            return "NO_CHANGE", "NO_CHANGE"
+        if file_mtime == last_modified_time: return "NO_CHANGE", "NO_CHANGE"
         last_modified_time = file_mtime
     except OSError: return None, None
 
     category_data = defaultdict(list)
     category_totals = defaultdict(float)
-
     try:
         with open(DATA_FILE, mode='r', encoding='utf_8_sig') as file:
             reader = csv.DictReader(file)
             if not reader.fieldnames: return None, None
-            
             fieldnames = [f.lower() for f in reader.fieldnames]
             if 'category' not in fieldnames: return None, None
 
@@ -83,28 +66,22 @@ def get_expenses_data():
                         category_data[cat].append((date, amt, note))
                 except: continue
     except: return None, None
-
     return category_totals, category_data
 
 def on_window_close(category):
-    """當表格視窗關閉時，從追蹤清單中移除"""
     if category in opened_windows:
         del opened_windows[category]
 
 def show_custom_table(category):
-    """顯示詳細表格視窗 (單例模式 + 尺寸加大)"""
-    
-    # 1. 防止重複開啟
+    """顯示詳細視窗 (智慧換行版)"""
     if category in opened_windows:
         win_info = opened_windows[category]
         root = win_info['root']
-        # 如果視窗還在，就把它拉到最前面，然後結束函式
         if root.winfo_exists():
             root.lift()
             root.focus_force()
             return
         else:
-            # 如果視窗物件在但其實已經關了(意外狀況)，就從清單移除重開
             del opened_windows[category]
 
     items = current_details.get(category, [])
@@ -112,20 +89,15 @@ def show_custom_table(category):
     root = tk.Tk()
     root.title(f"{category} 明細")
     
-    # 2. 強制設定大尺寸 (500x600)，比輸入視窗稍大
-    w, h = 500, 600
+    # 設定視窗大小
+    w, h = 900, 600
     ws, hs = root.winfo_screenwidth(), root.winfo_screenheight()
     x, y = (ws/2) - (w/2), (hs/2) - (h/2)
     root.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
-    root.configure(bg="#FDFEFE") 
+    root.configure(bg="white") 
     
-    # 設定關閉視窗時的 callback
     root.protocol("WM_DELETE_WINDOW", lambda: [root.destroy(), on_window_close(category)])
 
-    # 標題區
-    header_frame = tk.Frame(root, bg="#FDFEFE")
-    header_frame.pack(fill=tk.X, pady=20, padx=20)
-    
     try:
         cat_index = current_labels.index(category)
         color_idx = cat_index % len(CUSTOM_COLORS)
@@ -134,161 +106,164 @@ def show_custom_table(category):
     except:
         hex_title_color = "#34495E"
 
-    tk.Label(header_frame, text=f"📂 {category}", 
-             font=("Microsoft JhengHei", 22, "bold"), 
-             bg="#FDFEFE", fg=hex_title_color).pack(side=tk.LEFT)
-
-    # 表格樣式
-    style = ttk.Style()
-    style.theme_use("clam")
+    # --- 標題區 ---
+    header_frame = tk.Frame(root, bg="white")
+    header_frame.pack(fill=tk.X, pady=20, padx=30)
     
-    # 表頭字體加大
-    style.configure("Custom.Treeview.Heading", 
-                    font=("Microsoft JhengHei", 14, "bold"),
-                    background=hex_title_color, foreground="white", relief="flat")
-    
-    # 3. 表格內容字體加大 (Size 14) + 行高加高 (RowHeight 50)
-    style.configure("Custom.Treeview", 
-                    font=("Microsoft JhengHei", 14), 
-                    rowheight=50, 
-                    background="white", fieldbackground="white", borderwidth=0)
-    
-    style.map("Custom.Treeview", background=[('selected', '#D6EAF8')])
+    header_label = tk.Label(header_frame, text=f"📂 {category}", 
+             font=("Microsoft JhengHei", 24, "bold"), 
+             bg="white", fg=hex_title_color)
+    header_label.pack(side=tk.LEFT)
 
-    columns = ('date', 'amount', 'note')
-    tree = ttk.Treeview(root, columns=columns, show='headings', style="Custom.Treeview")
+    # --- 可捲動內容區 ---
+    container = tk.Frame(root, bg="white")
+    container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
 
-    tree.heading('date', text='📅 日期')
-    tree.column('date', width=140, anchor='center')
+    canvas = tk.Canvas(container, bg="white", highlightthickness=0)
+    scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
     
-    tree.heading('amount', text='💰 金額')
-    tree.column('amount', width=100, anchor='center') 
-    
-    tree.heading('note', text='📝 備註')
-    tree.column('note', width=220, anchor='w')
+    # 這裡不設定固定寬度，讓它自動適應
+    scrollable_frame = tk.Frame(canvas, bg="white")
 
-    scrollbar = ttk.Scrollbar(root, orient=tk.VERTICAL, command=tree.yview)
-    tree.configure(yscroll=scrollbar.set)
-    
-    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=(0, 10), padx=(0, 20))
+    # 🔧 關鍵修正 1：讓 scrollable_frame 的寬度永遠等於 canvas 的寬度
+    # 這樣內容就不會超出視窗邊緣
+    frame_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
-    # 底部總計 Label
-    footer = tk.Frame(root, bg="#ECF0F1", height=60)
-    footer.pack(fill=tk.X, side=tk.BOTTOM)
-    total_label = tk.Label(footer, text="", 
-             font=("Microsoft JhengHei", 18, "bold"), 
-             bg="#ECF0F1", fg="#E74C3C")
-    total_label.pack(side=tk.RIGHT, padx=30, pady=15)
+    def _configure_canvas(event):
+        # 更新捲動範圍
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        # 強制內層 Frame 寬度等於 Canvas 寬度
+        canvas.itemconfig(frame_id, width=event.width)
 
-    # 儲存視窗資訊到全域變數，供後續更新使用
+    canvas.bind("<Configure>", _configure_canvas)
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
     opened_windows[category] = {
         'root': root,
-        'tree': tree,
-        'label': total_label
+        'frame': scrollable_frame,
+        'header_label': header_label
     }
 
-    # 首次填入資料
     refresh_table_content(category, items)
 
 def refresh_table_content(category, items):
-    """更新特定類別表格的內容"""
     if category not in opened_windows: return
     
     win_info = opened_windows[category]
-    tree = win_info['tree']
-    total_label = win_info['label']
+    frame = win_info['frame']
+    header_label = win_info['header_label']
     
-    # 清空舊資料
-    for item in tree.get_children():
-        tree.delete(item)
+    for widget in frame.winfo_children():
+        widget.destroy()
         
     total = 0
     sorted_items = sorted(items, key=lambda x: x[0], reverse=True)
     
-    tree.tag_configure('odd', background='#F4F6F7')
-    tree.tag_configure('even', background='white')
+    # --- 表頭 ---
+    # 使用 Grid 排版，確保對齊
+    header_row = tk.Frame(frame, bg="#EEEEEE", pady=10) 
+    header_row.pack(fill=tk.X, expand=True)
+    
+    # 設定 Grid 權重，讓備註欄位(Column 2)自動伸縮
+    header_row.grid_columnconfigure(0, minsize=150) # 日期
+    header_row.grid_columnconfigure(1, minsize=120) # 金額
+    header_row.grid_columnconfigure(2, weight=1)    # 備註 (伸縮)
 
+    tk.Label(header_row, text="日期", font=("Microsoft JhengHei", 14, "bold"), 
+             bg="#EEEEEE", anchor="center").grid(row=0, column=0, sticky="ew")
+    tk.Label(header_row, text="金額", font=("Microsoft JhengHei", 14, "bold"), 
+             bg="#EEEEEE", anchor="center").grid(row=0, column=1, sticky="ew")
+    tk.Label(header_row, text="備註", font=("Microsoft JhengHei", 14, "bold"), 
+             bg="#EEEEEE", anchor="w").grid(row=0, column=2, sticky="ew", padx=20)
+
+    # --- 資料行 ---
     for i, (date, amt, note) in enumerate(sorted_items):
         total += amt
-        tag = 'odd' if i % 2 == 0 else 'even'
-        tree.insert('', tk.END, values=(date, f"{int(amt):,}", note), tags=(tag,))
+        bg_color = "#F9F9F9" if i % 2 == 0 else "white"
         
-    total_label.config(text=f"總計: ${int(total):,}")
+        row_frame = tk.Frame(frame, bg=bg_color, pady=15)
+        row_frame.pack(fill=tk.X, expand=True)
+        
+        row_frame.grid_columnconfigure(0, minsize=150)
+        row_frame.grid_columnconfigure(1, minsize=120)
+        row_frame.grid_columnconfigure(2, weight=1) # 關鍵：備註欄位佔滿剩餘空間
+
+        # 1. 日期
+        tk.Label(row_frame, text=date, font=("Microsoft JhengHei", 14), 
+                 bg=bg_color, anchor="center").grid(row=0, column=0, sticky="ew")
+        
+        # 2. 金額
+        tk.Label(row_frame, text=f"${int(amt):,}", font=("Microsoft JhengHei", 14, "bold"), fg="#E74C3C",
+                 bg=bg_color, anchor="center").grid(row=0, column=1, sticky="ew")
+        
+        # 3. 備註 (🔧 關鍵修正 2：動態 Wraplength)
+        note_label = tk.Label(row_frame, text=note, font=("Microsoft JhengHei", 14), 
+                 bg=bg_color, anchor="w", justify="left")
+        note_label.grid(row=0, column=2, sticky="ew", padx=20)
+        
+        # 這個神奇的指令會監聽視窗變化，自動計算該在哪裡換行
+        # e.width - 10 表示：只要寬度一變，換行點就設為「當前寬度 - 10px」
+        note_label.bind('<Configure>', lambda e: e.widget.configure(wraplength=e.width-10))
+
+        ttk.Separator(frame, orient='horizontal').pack(fill='x')
+
+    header_label.config(text=f"📂 {category} (總計: ${int(total):,})")
 
 def update_open_tables(all_details):
-    """【新功能】檢查所有已開啟的視窗，並自動更新它們的資料"""
-    # 複製 key 列表以防迭代時修改字典
     for category in list(opened_windows.keys()):
         if category in all_details:
-            # 如果這個類別有新資料，就刷新表格
             new_items = all_details[category]
             refresh_table_content(category, new_items)
-        else:
-            # 如果資料庫裡這類別不見了(極少見)，也可以選擇不做事或清空
-            pass
 
 def update_chart(frame):
     global current_wedges, current_texts, current_autotexts, current_labels, current_details
-    
     totals, details = get_expenses_data()
-    
-    # 這裡的邏輯是：如果有新資料 (totals不是字串)，我們就要更新圖表 AND 更新表格
-    if totals == "NO_CHANGE" or totals is None: 
-        return
+    if totals == "NO_CHANGE" or totals is None: return
 
-    # 1. 更新圖表
     ax.clear()
-    
     current_details = details
     labels = list(totals.keys())
     sizes = list(totals.values())
     current_labels = labels
 
-    # 2. 【關鍵】如果有任何表格視窗開著，順便更新它們的內容！
     update_open_tables(details)
 
     if not sizes:
         ax.text(0.5, 0.5, "等待資料輸入...", ha='center', va='center', fontsize=14, color='gray')
         return
 
-    # 繪製圓餅圖
     is_single = len(sizes) <= 1
     edge_width = 0 if is_single else 2
 
     wedges, texts, autotexts = ax.pie(
-        sizes, 
-        labels=labels, 
-        autopct='%1.1f%%', 
-        startangle=140,
-        colors=CUSTOM_COLORS, 
-        pctdistance=0.8,
-        labeldistance=1.1
+        sizes, labels=labels, autopct='%1.1f%%', startangle=140,
+        colors=CUSTOM_COLORS, pctdistance=0.8, labeldistance=1.1
     )
 
     for i, w in enumerate(wedges):
         w.set_edgecolor('white')
         w.set_linewidth(edge_width)
-        
         face_color = w.get_facecolor()
         text_color = darken_color(face_color, factor=0.45) 
-        
         texts[i].set_fontsize(14)        
         texts[i].set_fontweight('bold')
         texts[i].set_color(text_color)
-        
         autotexts[i].set_color('white')
         autotexts[i].set_fontweight('bold')
         autotexts[i].set_fontsize(11)
-        autotexts[i].set_path_effects([
-            path_effects.withStroke(linewidth=2, foreground=text_color)
-        ])
+        autotexts[i].set_path_effects([path_effects.withStroke(linewidth=2, foreground=text_color)])
 
     current_wedges = wedges
     current_texts = texts
     current_autotexts = autotexts
-
-    ax.set_title('支出即時監控', fontsize=18, fontweight='bold', pad=20, color='#555')
+    ax.set_title('支出圓餅圖', fontsize=18, fontweight='bold', pad=20, color='#555')
     ax.axis('equal') 
 
 def on_hover(event):
@@ -301,7 +276,6 @@ def on_hover(event):
                 current_texts[idx].set_fontsize(14)
             fig.canvas.draw_idle()
         return
-
     found = False
     for i, w in enumerate(current_wedges):
         if w.contains(event)[0]:
@@ -317,7 +291,6 @@ def on_hover(event):
                         current_texts[idx].set_fontsize(14)
                 fig.canvas.draw_idle()
             break
-            
     if not found and hovered_index != -1:
         hovered_index = -1
         for idx, wedge in enumerate(current_wedges):
@@ -326,30 +299,18 @@ def on_hover(event):
         fig.canvas.draw_idle()
 
 def on_click(event):
-    """滑鼠點擊偵測"""
     if event.button != 1 or event.inaxes != ax: return
-    
     for i, wedge in enumerate(current_wedges):
         if wedge.contains(event)[0]:
             category = current_labels[i]
-            # 這裡改成呼叫 show_custom_table，裡面有防止重複的邏輯
             show_custom_table(category)
             break
 
 if __name__ == "__main__":
     plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei', 'Arial Unicode MS', 'SimHei'] 
     plt.rcParams['axes.unicode_minus'] = False
-
     fig, ax = plt.subplots(figsize=(8, 6))
-    
     fig.canvas.mpl_connect('button_press_event', on_click)
     fig.canvas.mpl_connect("motion_notify_event", on_hover)
-    
     ani = animation.FuncAnimation(fig, update_chart, interval=1000, cache_frame_data=False)
-
-    print("程式已啟動！設定更新：")
-    print("1. 表格視窗大小已調整為 500x600 (比輸入視窗大)")
-    print("2. 字體已加大加粗，確保清晰")
-    print("3. 已防止重複開啟相同視窗")
-    print("4. 表格開啟狀態下，新增資料會自動更新")
     plt.show()
