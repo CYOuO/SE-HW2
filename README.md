@@ -49,6 +49,7 @@ python Visualization_module.py
 * 步驟三：按下類別，打開明細表格
 ![明細視窗](details.png)
 ## 開發成員
+（為了方便看分工沒有刪除不要的branch）
 * Member A-邱采嫻: 負責 Input Module 。
 * Member B-歐家怡: 負責 Visualization Module。
 ![git 過程圖](git.png)
