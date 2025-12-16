@@ -52,3 +52,6 @@ python Visualization_module.py
 * Member A-邱采嫻: 負責 Input Module 。
 * Member B-歐家怡: 負責 Visualization Module。
 ![git 過程圖](git.png)
+
+## Demo 連結
+https://youtu.be/1EjJahSy_FA?si=blST08ix1zkokzVD
